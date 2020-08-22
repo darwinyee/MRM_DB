@@ -13,13 +13,22 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.engine('handlebars', handlebars.engine);
 app.use('/static', express.static('public')); //Allow use of static files
+app.use(express.static(path.join(__dirname, '/public/uploads')))
 app.set('view engine', 'handlebars'); //Use Handlebars templates
 
 app.use('/api', cors(), require('./api/searchAPI.js'));
-app.use('/bitCometAPI', cors(), require('./api/bitCometXML.js'));
+app.use('/uploadItem', require('./api/uploadFile.js'));
 
 app.get('/', function(req,res){
     res.render("home");
+})
+
+app.get('/search',function (req,res){
+	res.render("search");
+})
+
+app.get('/upload', function (req,res){
+	res.render("upload");
 })
 
 //Go here when 404

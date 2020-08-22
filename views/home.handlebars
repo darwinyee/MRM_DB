@@ -1,100 +1,15 @@
 <div class="container">
-    <form>
-        <label for="searchItem">Input your search terms: </label>
-        <input type="text" class="form-control" id="searchItem" placeholder="Search here">
-        <button class="form-control btn btn-info" id="searchBtn">Search</button>
-        <hr>
-        <label for="insertItem">Input items to insert: </label>
-        <input type="text" class="form-control" id="insertItem" placeholder="Address">
-        <input type="text" class="form-control" id="insertItem2" placeholder="Name of item">
-        <input type="text" class="form-control" id="insertItem3" value="btfiles_info">
-        <button class="form-control btn btn-info" id="insertBtn">Insert</button>
-    </form>
-    
+    <div class="jumbotron">
+        <h1 class="display-4">Welcome to MRM database</h1>
+        <p class="lead">Select one of the links to begin</p>
+        <hr class="my-4">
+
+        <a class="btn btn-primary btn-lg" href="./search" role="button">Search for peptides</a>
+        <a class="btn btn-primary btn-lg" href="./upload" role="button">Upload new peptide information</a>
+
+    </div>
 </div>
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
 
-        //remove the search function from the navbar
-        document.getElementById("searchBtn").addEventListener("click", function(event){
-            event.preventDefault();
-            performSearch();
-        })
-
-        //add enter key detection to input_search
-        document.getElementById("searchItem").addEventListener("keyup", function(event){
-            if(event.keyCode === 13){
-                event.preventDefault();
-                document.getElementById("searchBtn").click();
-            }
-        })
-
-        //remove the search function from the navbar
-        document.getElementById("insertBtn").addEventListener("click", function(event){
-            event.preventDefault();
-            performInsert();
-        })
-    });
-
-    function performSearch(){
-        let payload = {'searchTerm':document.getElementById("searchItem").value,
-                       'table':document.getElementById("insertItem3").value      //or episode_link          
-        };
-        console.log(payload);
-        fetch('/api/search',{
-            method:'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-            .then((data1)=>{
-                return data1.json();
-            })
-            .then((data2) => {
-                printData(data2);
-            })
-            .catch((err) => {
-                console.log(err);
-            })
-    }
-
-    function performInsert(){
-        let payload = {fileLink:document.getElementById("insertItem").value,
-                       filename:document.getElementById("insertItem2").value,
-                       aid:get_aid(document.getElementById("insertItem").value),
-                       exactLnk:document.getElementById("insertItem").value,
-                       linkItemName:document.getElementById("insertItem2").value,
-                       rejectBefore:false,
-                       table:document.getElementById("insertItem3").value      //or episode_link          
-        };
-        console.log(payload);
-        fetch('/api/insert',{
-            method:'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-            .then((data1)=>{
-                return data1.json();
-            })
-            .then((data2) => {
-                printData(data2);
-            })
-            .catch((err) => {
-                console.log(err);
-            })
-    }
-
-    function printData(receivedData){
-        console.log(receivedData);
-    }
-
-    /* This function performs extensive input test using regular expression.*/
-    function get_aid(targetInput){
-        const regex = RegExp(/aid=([0-9]+)/);
-        let match = targetInput.match(regex);
-        if (match != null){
-            return match[1];
-        }else{
-            return -1;
-        }
-    }   
 </script>
+   
