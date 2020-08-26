@@ -357,7 +357,7 @@ router.post('/uploadDB', (req,res,next) => {
                     PeptideQuality: curLine[6],
                     
                 });
-
+                console.log(curLine[7]);
                 let modInfo = await getModificationId(curLine[3].toUpperCase(),curLine[7]);
                 //console.log(modInfo);
                 linesArr[i].Modification = modInfo.modification;

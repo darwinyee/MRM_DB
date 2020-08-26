@@ -13,7 +13,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.engine('handlebars', handlebars.engine);
 app.use('/static', express.static('public')); //Allow use of static files
-app.use(express.static(path.join(__dirname, '/public/uploads')))
+app.use(express.static(path.join(__dirname, '/public/uploads')));
+app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'handlebars'); //Use Handlebars templates
 
 app.use('/api', cors(), require('./api/searchAPI.js'));
