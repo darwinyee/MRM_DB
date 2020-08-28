@@ -1,3 +1,4 @@
+
 document.addEventListener('DOMContentLoaded', () => {
 
     //remove the search function from the navbar
@@ -98,10 +99,16 @@ function printData(receivedData){  //write html table
         let textMsg = document.createElement("p");
         textMsg.textContent = receivedData.error;
         container.appendChild(textMsg);
+        
     }else{
         let textMsg = document.createElement("p");
         textMsg.textContent = receivedData.peptideCount + ' items found:';
         container.appendChild(textMsg);
+        let downloadAllTrans = document.createElement("button");
+        downloadAllTrans.className = "btn btn-info";
+        downloadAllTrans.textContent = "Download All Transitions";
+        downloadAllTrans.setAttribute('onclick', 'downloadAllTrans()');
+        container.appendChild(downloadAllTrans);
 
         let container2 = document.createElement("div");
         container2.className = "row justify-content-center";
@@ -110,7 +117,7 @@ function printData(receivedData){  //write html table
         let table = document.createElement("table");
         table.id = "searchTable1";
         table.className = 'table mt-2';
-        let headerArr = ['Accession#','Catalog#','Protein','Peptide','Type','Quality','In Stock','Location','Modifications'];
+        let headerArr = ['Accession#','Catalog#','Protein','Peptide','Type','Quality','In Stock','Location','Modifications','Transitions'];
         let thead = document.createElement("thead");
         let theadrow = document.createElement("tr");
         for(let i = 0; i < headerArr.length; i++){
@@ -118,6 +125,9 @@ function printData(receivedData){  //write html table
             if(headerArr[i] == 'Peptide'){
                 temp.setAttribute('style','width: 200px');
                 temp.innerHTML = headerArr[i];
+            }else if(headerArr[i] == 'Type' || headerArr[i] == 'Quality' || headerArr[i] == 'In Stock' || headerArr[i] == 'Location'){
+                temp.setAttribute('style','width: 80px');
+                temp.textContent = headerArr[i];
             }else{
                 temp.textContent = headerArr[i];
             }
@@ -133,6 +143,23 @@ function printData(receivedData){  //write html table
                 let thisCol = document.createElement("td");
                 if(headerArr[j] == 'Peptide'){
                     thisCol.innerHTML = highlightAminoAcid(receivedData.searchResult[i][headerArr[j]],receivedData.searchResult[i]['Modifications']);
+                }else if(headerArr[j] == 'Transitions'){
+                    if(receivedData.searchResult[i]['Transitions'].hasTransitions){
+                        let downloadLink = document.createElement("button");
+                        downloadLink.id = 'trans' + receivedData.searchResult[i]['id'];
+                        downloadLink.setAttribute('onClick', `downloadTrans([${receivedData.searchResult[i]["id"]}])`);
+                        downloadLink.className = "btn btn-info";
+                        downloadLink.textContent = "Download";
+                        thisCol.appendChild(downloadLink);
+                        //hidden span for peptide id with trans info
+                        let peptideIdSpan = document.createElement("span");
+                        peptideIdSpan.className = "peptideIdWithTrans";
+                        peptideIdSpan.style = "display:none";
+                        peptideIdSpan.textContent = receivedData.searchResult[i]['id'];
+                        thisCol.appendChild(peptideIdSpan);
+                    }else{
+                        thisCol.textContent = 'Unavailable';
+                    }
                 }else{
                     thisCol.textContent = receivedData.searchResult[i][headerArr[j]];
                 }
@@ -148,6 +175,55 @@ function printData(receivedData){  //write html table
 
     let body = document.getElementsByTagName("body")[0];
     body.appendChild(container);
+}
+
+async function downloadTrans(peptideIds){
+    //make post request to build download link to download trans
+    let payload = {
+        peptideIds : peptideIds
+    }
+    console.log(payload);
+
+    await fetch('/api/downloadTrans',{
+        method: 'POST',
+        headers: { 'Content-Type' : 'application/json'},
+        body: JSON.stringify(payload)
+    })
+        .then((data1)=>{
+            return data1.json();
+        })
+        .then((data2)=>{
+            console.log(data2);
+            //add a link and click on it to download the trans
+            let downLnk = document.createElement("a");
+            document.body.appendChild(downLnk);
+            downLnk.id = 'templink1';
+            downLnk.style = "display:none";
+            downLnk.download = "";
+            downLnk.href = data2.filelink;
+            downLnk.click();
+            document.body.removeChild(downLnk);
+        })
+        .catch((err) => {
+            alert(err);
+        })
+
+}
+
+async function downloadAllTrans(){
+    let idElements = document.getElementsByClassName("peptideIdWithTrans");
+    let idList = [];
+    for(let i = 0; i < idElements.length; i++){
+        idList.push(idElements[i].textContent);
+    }
+    if(idList.length == 0){
+        alert("Peptides have no transitions information.");
+    }else{
+        console.log(idList);
+        await downloadTrans(idList);
+        alert("Transitions downloaded!");
+    }
+    
 }
 
 function highlightAminoAcid(peptide, modificationString){

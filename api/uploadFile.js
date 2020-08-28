@@ -21,7 +21,7 @@ let upload = multer({
     storage: storage,
     fileFilter: function (req, file, cb){
         let ext = path.extname(file.originalname);
-        if(ext != '.csv' && ext != '.pdf'){
+        if(ext != '.csv'){
             return cb(new Error('.csv Only!'));
         }
         cb(null, true);
@@ -67,9 +67,9 @@ function insertTrans(trans){
     //console.log(trans)
     let promise = new Promise((resolve, reject) => {
 
-        pool.query('INSERT INTO transitions (CatalogNumber,Peptide,istd,Precursor_Ion,MS1_Res,Product_Ion,MS2_Res,Dwell,OptimizedCE,Ion_Name,peptideId)' + 
+        pool.query('INSERT INTO transitions (CatalogNumber,Peptide,istd,Precursor_Ion,MS1_Res,Product_Ion,MS2_Res,Dwell,OptimizedCE,Ion_Name,peptideId,ModificationString,FromFile)' + 
                     ' VALUES (?,?,?,?,?,?,?,?,?,?,?)', 
-                    [trans.CatalogNumber,trans.Peptide,trans.istd,trans.Precursor_Ion,trans.MS1_Res,trans.Product_Ion,trans.MS2_Res,trans.Dwell,trans.OptimizedCE,trans.Ion_Name,trans.peptideId],
+                    [trans.CatalogNumber,trans.Peptide,trans.istd,trans.Precursor_Ion,trans.MS1_Res,trans.Product_Ion,trans.MS2_Res,trans.Dwell,trans.OptimizedCE,trans.Ion_Name,trans.peptideId,trans.ModificationString,trans.FromFile],
                     (err,result)=>{
                         if(err){
                             resolve({"error":err});
@@ -86,7 +86,7 @@ function updateTrans(trans, id){
     let promise = new Promise((resolve, reject) => {
         //no check of the id
         pool.query('UPDATE transitions SET ' + 
-                   'CatalogNumber=?,Peptide=?,istd=?,Precursor_Ion=?,MS1_Res=?,Product_Ion=?,MS2_Res=?,Dwell=?,OptimizedCE=?,Ion_Name=?,peptideId=?' + 
+                   'CatalogNumber=?,Peptide=?,istd=?,Precursor_Ion=?,MS1_Res=?,Product_Ion=?,MS2_Res=?,Dwell=?,OptimizedCE=?,Ion_Name=?,peptideId=?,Modificationstring=?,FromFile=?' + 
                    ' WHERE id=' + id,
                    [
                     trans.CatalogNumber,
@@ -99,7 +99,9 @@ function updateTrans(trans, id){
                     trans.Dwell || 5,
                     trans.OptimizedCE,
                     trans.Ion_Name,
-                    trans.peptideId  
+                    trans.peptideId,
+                    trans.ModificationString,
+                    trans.FromFile 
                    ],(err, result)=>{
                         if(err){
                             resolve({"error":err});
@@ -134,15 +136,9 @@ function addTrans(trans){
     return promise;
 }
 
-function insertPeptideInfo(peptideInfo){
-    let promise = new Promise(async (resolve, reject) => {
-        let queryResult = await queryDB({'CatalogNumber':peptideInfo.CatalogNumber}, 'heavypeptide_info', true);
-        if(queryResult['error'] !== undefined){
-            resolve({'error':'in insertPeptideInfo'+queryResult['error']});
-        }
-        else if (queryResult['queryResult'].length == 0){
-            //insert new peptide info
-            pool.query('INSERT INTO heavypeptide_info (AccessionNumber,CatalogNumber,ProteinSymbol,Peptide,PeptideType,PeptideQuality,InStock,StorageLocation)' + 
+function insertNewPeptide(peptideInfo){
+    let promise = new Promise((resolve, reject) => {
+        pool.query('INSERT INTO heavypeptide_info (AccessionNumber,CatalogNumber,ProteinSymbol,Peptide,PeptideType,PeptideQuality,InStock,StorageLocation)' + 
                         ' VALUES (?,?,?,?,?,?,?,?)',
                         [
                            peptideInfo.AccessionNumber || '',
@@ -155,19 +151,97 @@ function insertPeptideInfo(peptideInfo){
                            peptideInfo.StorageLocation || 'unknown'
                         ],async (err,result)=>{
                             if(err){
-                                resolve({'error':'in insertPeptideInfo'+err});
+                                resolve({'error':'in insertNewPeptide'+err});
                             }else{
                                 //need to insert M:M relationship
                                 for(let i = 0; i < peptideInfo.Modification.length; i++){
                                     let updateMMresult = await updatePeptideModRelationship(result.insertId, peptideInfo.Modification[i].id, peptideInfo.Modification[i].Position);
                                     console.log(updateMMresult);
-                                    console.log("yeah" + i);
+                                    //console.log("yeah" + i);
                                 }
                                 resolve(result.insertId);
                             }
                         });
+    }); 
+    return promise;
+}
+
+function updatePeptide(newPeptideInfo, oldPeptideInfo){
+    let promise = new Promise((resolve, reject) => {
+        //peptideId is valid by assumption
+        pool.query('UPDATE heavypeptide_info SET ' + 
+                   'AccessionNumber=?,CatalogNumber=?,ProteinSymbol=?,Peptide=?,PeptideType=?,PeptideQuality=?,InStock=?,StorageLocation=?' +
+                   ' WHERE id=' + oldPeptideInfo.id,
+                   [
+                    newPeptideInfo.AccessionNumber || oldPeptideInfo.AccessionNumber,
+                    newPeptideInfo.CatalogNumber,
+                    newPeptideInfo.ProteinSymbol || oldPeptideInfo.ProteinSymbol,
+                    newPeptideInfo.Peptide,
+                    newPeptideInfo.PeptideType || oldPeptideInfo.PeptideType,
+                    newPeptideInfo.PeptideQuality || oldPeptideInfo.PeptideQuality,
+                    newPeptideInfo.InStock || oldPeptideInfo.InStock,
+                    newPeptideInfo.StorageLocation || oldPeptideInfo.StorageLocation
+                   ],async (err, result)=>{
+                       if(err){
+                           resolve({"error": 'in updatePeptide: ' + err});
+                       }else{
+                           //need to delete old M:M relationship and add new M:M relationship
+                           let deleteResult = await deletePeptideModRelationship(oldPeptideInfo.id);
+
+                           if(deleteResult.error !== undefined){
+                               resolve({'error': 'in updatePeptide: heavypeptide_info updated but M:M update error-' + deleteResult['error']});
+                           }else{
+
+                                for(let i = 0; i < newPeptideInfo.Modification.length; i++){
+                                        let updateMMresult = await updatePeptideModRelationship(oldPeptideInfo.id, newPeptideInfo.Modification[i].id, newPeptideInfo.Modification[i].Position);
+                                        console.log(updateMMresult);
+                                        //console.log("yeah" + i);
+                                    }
+
+                                resolve({"updateID":oldPeptideInfo.id});
+                            }
+                       }
+                   })
+    });
+    return promise;
+}
+
+function addPeptideInfo(peptideInfo){
+    let promise = new Promise(async (resolve, reject) => {
+        let queryResult = await queryDB({'CatalogNumber':peptideInfo.CatalogNumber}, 'heavypeptide_info', true);
+        if(queryResult['error'] !== undefined){
+            resolve({'error':'in addPeptideInfo'+queryResult['error']});
+        }
+        else if (queryResult['queryResult'].length == 0){
+            //insert new peptide info
+            let insertResult = await insertNewPeptide(peptideInfo);
+            resolve(insertResult);
         }else{
-            resolve(queryResult['queryResult'][0].id);
+            let updateResult = await updatePeptide(peptideInfo, queryResult['queryResult'][0]);
+            resolve(updateResult.updateID);  //modify to check for error if wanted
+        }
+    });
+    return promise;
+}
+
+function deletePeptideModRelationship(peptideId){
+    let promise = new Promise(async (resolve, reject)=>{
+        let queryResult = await queryDB({peptideId:peptideId}, 'peptides_modifications', true);
+        if(queryResult['error'] !== undefined){
+            resolve({'error': 'in deletePeptideModRelationship ' + queryResult['error']});
+        }else if(queryResult['queryResult'].length == 0){
+            //not found, no need to delete
+            resolve({'done': 'no entry in db'});
+        }else{
+            //some entries exists
+            pool.query('DELETE FROM peptides_modifications WHERE peptideId = ?', [peptideId], (err, rows) =>{
+                if(err){
+                    resolve({'error': 'in DELETE deletePeptideModRelationship ' + err});
+                }else{
+                    console.log(rows);
+                    resolve({'done' : 'delete existing entries'});
+                }
+            });
         }
     });
     return promise;
@@ -175,7 +249,8 @@ function insertPeptideInfo(peptideInfo){
 
 function updatePeptideModRelationship(peptideId, modId, modPosition){
     let promise = new Promise(async (resolve, reject) => {
-        let queryResult = await queryDB({peptideId:peptideId,modificationId:modId,modPosition,modPosition}, 'peptides_modifications', true);
+        console.log({peptideId:peptideId,modificationId:modId,modPosition:modPosition});
+        let queryResult = await queryDB({peptideId:peptideId,modificationId:modId,modPosition:modPosition}, 'peptides_modifications', true);
         if(queryResult['error'] !== undefined){
             resolve({'error':'in updatePeptideModRelationship'+queryResult['error']});
         }else if (queryResult['queryResult'].length == 0){
@@ -280,6 +355,8 @@ function getModificationId(peptide, modificationString){
     return promise; //result is {modification:[{id:,Modification:,TargetedSite:,ModificationType:,Position:}]}
 }
 
+
+//routes
 router.post('/uploadTrans', (req,res,next) => {
     upload(req, res, async function (err){
         if(err){
@@ -309,16 +386,18 @@ router.post('/uploadTrans', (req,res,next) => {
                     OptimizedCE: parseFloat(curLine[9]),
                     Cell_Accelerator_Voltage: Number(curLine[10]),
                     Ion_Name: curLine[11],
+                    FromFile: req.file.filename,
+                    ModificationString: curLine[12]
                 });
 
                 let modInfo = await getModificationId(curLine[1].toUpperCase(),curLine[12]);
                 //console.log(modInfo);
                 linesArr[i].Modification = modInfo.modification;
                 linesArr[i].PeptideType = modInfo.PeptideType;
-                linesArr[i].peptideId = await insertPeptideInfo(linesArr[i]);
+                linesArr[i].peptideId = await addPeptideInfo(linesArr[i]);
             }
             
-            for(let i=1; i < linesArr.length; i++){
+            for(let i=0; i < linesArr.length; i++){
                 let result = await addTrans(linesArr[i]);
                 console.log(result);
             }
@@ -362,7 +441,7 @@ router.post('/uploadDB', (req,res,next) => {
                 //console.log(modInfo);
                 linesArr[i].Modification = modInfo.modification;
                 //linesArr[i].PeptideType = modInfo.PeptideType;
-                linesArr[i].peptideId = await insertPeptideInfo(linesArr[i]);
+                linesArr[i].peptideId = await addPeptideInfo(linesArr[i]);
             }
 
             //console.log(linesArr);
