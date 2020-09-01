@@ -1,22 +1,44 @@
-<div class="container">
+<div class="container mt-5">
     <div class="h1 justify-content-center">
         Upload files to Database
     </div>
     <hr>
-    <form action="/uploadItem/uploadTrans" method="post" enctype="multipart/form-data">
-        <label for="uploadItem">Select the file to upload: </label>
-        <input type="file" class="form-control" id="uploadItem" name="uploadTrans">
-        <div class="row">
-            <div class="col-4"></div>
-            <div class="col-4">
-                <button class="form-control btn btn-info mt-5" id="uploadFile">Upload</button>
-            </div>
-            <div class="col-4"></div>
-        </div>
-        
-        
-        
+    <form id="uploadTrans" method="post" enctype="multipart/form-data" name="uploadTrans">
+        <label for="uploadTransFile">Select A Transition file to upload: </label>
+        <input type="file" class="form-control" id="uploadTransFile" name="uploadFile">  
     </form>
+    <div class="row">
+        <div class="col-4"></div>
+        <div class="col-4 d-flex justify-content-center">
+            <button class="btn btn-info mt-2" id="uploadTransFileBtn">Upload Transition file</button>
+        </div>
+        <div class="col-4"></div>
+    </div>
+    <hr>
+    <form id="uploadDB" method="post" enctype="multipart/form-data" name="uploadDB">
+        <label for="uploadDBFile">Select a UNIPROT database to upload (not stable, may crash website if database is too big): </label>
+        <input type="file" class="form-control" id="uploadDBFile" name="uploadFile">
+    </form>
+    <div class="row">
+        <div class="col-4"></div>
+        <div class="col-4 d-flex justify-content-center">
+            <button class="btn btn-info mt-2" id="uploadDBFileBtn">Upload Uniprot Database</button>
+        </div>
+        <div class="col-4"></div>
+    </div>
+    <hr>
+    <form id="uploadNewPeptide" method="post" enctype="multipart/form-data" name="uploadNewPeptide">
+        <label for="uploadNewPeptideFile">Select a peptide file to upload: </label>
+        <input type="file" class="form-control" id="uploadNewPeptideFile" name="uploadFile">
+    </form>
+    <div class="row">
+        <div class="col-4"></div>
+        <div class="col-4 d-flex justify-content-center">
+            <button class="btn btn-info mt-2" id="uploadNewPeptideFileBtn">Upload New Peptides</button>
+        </div>
+        <div class="col-4"></div>
+    </div>
+    <hr>
     
 </div>
-<script src=""></script>
+<script src="/frontendJS/upload.js"></script>

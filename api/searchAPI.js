@@ -1,5 +1,4 @@
 const express = require('express');
-const { get } = require('./uploadFile.js');
 const router = express.Router();
 const pool = require('../dbcon.js').pool;
 const path = require('path');
@@ -29,7 +28,11 @@ function reformatOutput(result){
                     'Location' : thisPeptide.StorageLocation,
                     'id' : thisPeptide.id,
                     'Modifications' : thisPeptide.Modification + `(${thisPeptide.modPosition})`,
-                    'Transitions' : await getTransitionInfo(thisPeptide.id)
+                    'Transitions' : await getTransitionInfo(thisPeptide.id),
+                    'Uniprot#' : thisPeptide.UniprotAccession,
+                    'Gene Symbol' : thisPeptide.GeneSymbol,
+                    'Species' : thisPeptide.Species,
+                    'ProteinName' : thisPeptide.ProteinName
                 }
                 peptideCt = peptideCt + 1;
                 previousCatNum = thisPeptide.CatalogNumber;

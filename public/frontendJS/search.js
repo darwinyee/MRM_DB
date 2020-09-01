@@ -117,7 +117,7 @@ function printData(receivedData){  //write html table
         let table = document.createElement("table");
         table.id = "searchTable1";
         table.className = 'table mt-2';
-        let headerArr = ['Accession#','Catalog#','Protein','Peptide','Type','Quality','In Stock','Location','Modifications','Transitions'];
+        let headerArr = ['Catalog#','Uniprot#','Gene Symbol','Species','Peptide','Type','Quality','Modifications','Transitions'];
         let thead = document.createElement("thead");
         let theadrow = document.createElement("tr");
         for(let i = 0; i < headerArr.length; i++){
