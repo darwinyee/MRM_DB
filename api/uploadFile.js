@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const readline = require('readline');
 
+//<-----------multer storage engine setup----------------->
 let storage = multer.diskStorage({
     destination: function (req, file, cb){
         cb(null, './public/uploads');
@@ -27,10 +28,10 @@ let upload = multer({
         cb(null, true);
     }
 }).single('uploadFile')
+//<-----------End multer storage engine setup----------------->
 
 
-//promise functions
-
+//Make query to database, can do multiple key,value pairs with either all AND or OR
 function queryDB(criteria, table, shouldMatchAll){   //criteria is {column,value} pair, no checking if column exists
     //console.log(value);
     let promise = new Promise((resolve, reject) => {
@@ -63,6 +64,7 @@ function queryDB(criteria, table, shouldMatchAll){   //criteria is {column,value
 }
 
 
+//<-----------Update transition table in database----------------->
 function insertTrans(trans){
     //console.log(trans)
     let promise = new Promise((resolve, reject) => {
@@ -135,7 +137,10 @@ function addTrans(trans){
     });
     return promise;
 }
+//<------------End update transition table functions--------------->
 
+
+//<-----------Update heavy peptide table in database----------------->
 function insertNewPeptide(peptideInfo){
     let promise = new Promise((resolve, reject) => {
         pool.query('INSERT INTO heavypeptide_info (AccessionNumber,CatalogNumber,ProteinSymbol,Peptide,PeptideType,PeptideQuality,InStock,StorageLocation,UniprotAccession,GeneSymbol,Species,ProteinName)' + 
@@ -231,7 +236,10 @@ function addPeptideInfo(peptideInfo){
     });
     return promise;
 }
+//<-----------End Update heavy peptide table in database----------------->
 
+
+//<-----------Update peptide-modification table in database----------------->
 function deletePeptideModRelationship(peptideId){
     let promise = new Promise(async (resolve, reject)=>{
         let queryResult = await queryDB({peptideId:peptideId}, 'peptides_modifications', true);
@@ -277,7 +285,10 @@ function updatePeptideModRelationship(peptideId, modId, modPosition){
     });
     return promise;
 }
+//<-----------End Update peptide-modification table in database----------------->
 
+
+//<-----------Extract Modification information from a modification string----------------->
 function getModificationId(peptide, modificationString){
     const spaceRgx = /\s/gi;
     modificationString = modificationString.replace(spaceRgx,'');
@@ -362,7 +373,10 @@ function getModificationId(peptide, modificationString){
     });
     return promise; //result is {modification:[{id:,Modification:,TargetedSite:,ModificationType:,Position:}]}
 }
+//<-----------End Extract Modification information from a modification string----------------->
 
+
+//<-----------Reading/Storing Peptide information from Uniprot Database----------------->
 function digestProtein(enyzme, proteinSeq, aaLowerLimit,aaUpperLimit){
     let promise = new Promise((resolve, reject) => {
         //return a list of peptides, proteinSeq must be uppercase
@@ -401,6 +415,7 @@ function digestProtein(enyzme, proteinSeq, aaLowerLimit,aaUpperLimit){
     return promise;
 }
 
+/*
 function addPeptideMetaData(peptide){
     let promise = new Promise(async (resolve, reject) => {
         //peptide is key:value object
@@ -433,7 +448,7 @@ function addPeptideMetaData(peptide){
         }
     });
     return promise;
-}
+}*/
 
 function hashPeptide(peptide){
     let limit = 500;  //500 hash value
@@ -510,9 +525,9 @@ function saveJSONToFile(allPeptideInfo, dbName){
     let promise = new Promise(async (resolve, reject) => {
         try{
             let fs = require('fs');
+            //for now, it will rewrite the database, combining with the old information, even if it is duplicate
 
-            //check if written before
-            let lines = [];
+            //let lines = [];
             let flag = {flags:'w'};
             /*
             if(await isFileExists(path.join('./public/database/' + dbName),lines)){
@@ -525,14 +540,14 @@ function saveJSONToFile(allPeptideInfo, dbName){
             for(let key in allPeptideInfo){
                 let thisObj = {};
                 thisObj[key] = allPeptideInfo[key];
-                let curLine = JSON.stringify(thisObj);
+                //let curLine = JSON.stringify(thisObj);
                 //if(!lines.includes(curLine)){
                     ws.write(JSON.stringify(thisObj));
                     ws.write('\n');
                 //}
             }
             ws.end();
-            resolve(dbName);
+            resolve("Database saved!");
         }
         catch(err){
             console.log(err);
@@ -551,7 +566,6 @@ function readJSONToFile(dbName){
             let result = {};
             let totalLine = 0;
 
-            //let lines = fs.readFileSync(path.join('./public/database/' + dbName), 'utf8').split('\n').filter(Boolean);
             let s = fs.createReadStream(filePath)
                     .on('error', function(err){
                         console.log('File not found');
@@ -584,19 +598,6 @@ function readJSONToFile(dbName){
                               resolve(result);
                           })
                     );
-            /*
-            for(let i = 0; i < lines.length; i++){
-                if(i % 100 == 0){
-                    console.log("Reading " + i + ' lines');
-                }
-                let thisObj = JSON.parse(lines[i]);
-                for(let key in thisObj){
-                    result[key] = thisObj[key];
-                }
-            }
-            //console.log(result);
-            //resolve(JSON.parse(line));
-            resolve(result);*/
         }
         catch(err){
             console.log(err);
@@ -605,7 +606,10 @@ function readJSONToFile(dbName){
     });
     return promise;
 }
+//<-----------End Reading/Storing Peptide information from Uniprot Database----------------->
 
+
+//This function retrieves and combines uniprot information for a peptide, returns an object
 function retrieveUniprotInfo(peptide, allPeptideInfo){
     //return object
     let result = {
@@ -633,6 +637,7 @@ function retrieveUniprotInfo(peptide, allPeptideInfo){
     return result;
 }
 
+//This function extracts the proteinname/geneSymbol etc from a uniprot protein name in the .fasta
 function retrieveProteinMetaData(proteinLine, enzymeUsed){
     //this is for uniprot only
     let proteinMeta = {
@@ -675,12 +680,62 @@ function retrieveProteinMetaData(proteinLine, enzymeUsed){
 
 }
 
-//routes
+function isValidateFile(headerArr, fileHeaderLine, headerKey){
+    let fileHeaders = fileHeaderLine.split(',');
+
+    let inHeader = [];
+
+    for(let i = 0; i < fileHeaders.length; i++){
+        if(headerArr.includes(fileHeaders[i]) && !inHeader.includes(fileHeaders[i])){
+            inHeader.push(fileHeaders[i]);
+        }
+    }
+
+    if(inHeader.length < headerArr.length){
+        return false;
+    }
+
+    //build headerKey
+    for(let i = 0; i < headerArr.length; i++){
+        headerKey[headerArr[i]] = fileHeaders.indexOf(headerArr[i]);
+    }
+    
+    return true;
+}
+
+//<-----------Update database Peptide information with Uniprot database information----------------->
+async function updateWithUniprotInfo(peptideInfoArr){
+    //read and update peptideInfo with unipro information
+    //upload information to sql database
+    console.log("updateWithUniprotInfo");
+    //read masterDB
+    let allPeptideInfo = await readJSONToFile('masterDB');
+    if(!(allPeptideInfo['error'] === undefined)){
+        console.log("updateWithUniprotInfo:",allPeptideInfo['error']);
+        allPeptideInfo = {};
+    }else{
+        for(let i = 0; i < peptideInfoArr.length; i++){
+            console.log("updating ",peptideInfoArr[i].Peptide);
+            let curDBinfo = retrieveUniprotInfo(peptideInfoArr[i].Peptide, allPeptideInfo);
+            peptideInfoArr[i].UniprotAccession = curDBinfo.UniprotAccession;
+            peptideInfoArr[i].GeneSymbol = curDBinfo.GeneSymbol;
+            peptideInfoArr[i].Species = curDBinfo.Species;
+            peptideInfoArr[i].ProteinName = curDBinfo.ProteinName;
+            await addPeptideInfo(peptideInfoArr[i]);
+        }
+        console.log("updateWithUniprotInfo: Done");
+    }
+
+}
+//<-----------End Update database Peptide information with Uniprot database information----------------->
+
+
+//Different upload routes
 router.post('/uploadProteinDB', (req,res,next) => {
 
     upload(req, res, async function (err){
         if(err){
-            res.send({error: err});
+            res.send({status: err});
             console.log(err);
         }else{
             console.log("Protein db uploaded!");
@@ -731,7 +786,7 @@ router.post('/uploadProteinDB', (req,res,next) => {
 
             //write JSON to file
             let writeJSONresult = await saveJSONToFile(allPeptideInfo, 'masterDB');
-            res.send({addDBresult:writeJSONresult});
+            res.send({status:writeJSONresult});
             //console.log(allPeptideInfo);
             console.log('proteinct: ' + proteinCt);    
             //console.log(retrieveUniprotInfo("GEYLPLLQGK",allPeptideInfo));          
@@ -739,122 +794,133 @@ router.post('/uploadProteinDB', (req,res,next) => {
     });
 });
 
+
 router.post('/uploadTrans', async (req,res,next) => {
-    //read masterDB
-    let allPeptideInfo = await readJSONToFile('masterDB');
-    if(!(allPeptideInfo['error'] === undefined)){
-        console.log(allPeptideInfo['error']);
-        allPeptideInfo = {};
-    }
+
     upload(req, res, async function (err){
+        let finalResult = {};
         if(err){
-            res.send({error: err});
+            res.send({status: err});
             console.log(err)
         }else{
-            res.send({upload: "success"});
+            
             //console.log(req.file);
             console.log("file uploaded!");
             console.log("reading file");
 
-            let lines = fs.readFileSync(req.file.path, 'utf-8').split('\r\n').filter(Boolean);
+            let lines = fs.readFileSync(req.file.path, 'utf-8').split('\r\n').filter(Boolean);  //this is limited to 2GB
 
-            //check if the file is valid should be performed here
-            let linesArr = []
-            for(let i = 0; i < lines.length-1; i++){
-                let curLine = lines[i+1].split(',');
-                linesArr.push({
-                    CatalogNumber: curLine[0],
-                    Peptide: curLine[1].toUpperCase(),
-                    istd: curLine[2],
-                    Precursor_Ion: parseFloat(curLine[3]),
-                    MS1_Res: curLine[4],
-                    Product_Ion: parseFloat(curLine[5]),
-                    MS2_Res: curLine[6],
-                    Dwell: Number(curLine[7]),
-                    OptimizedCE: parseFloat(curLine[9]),
-                    Cell_Accelerator_Voltage: Number(curLine[10]),
-                    Ion_Name: curLine[11],
-                    FromFile: req.file.filename,
-                    ModificationString: curLine[12]
-                });
-                let masterDBinfo = retrieveUniprotInfo(linesArr[i].Peptide,allPeptideInfo);
-                linesArr[i].UniprotAccession = masterDBinfo.UniprotAccession;
-                linesArr[i].GeneSymbol = masterDBinfo.GeneSymbol;
-                linesArr[i].Species = masterDBinfo.Species;
-                linesArr[i].ProteinName = masterDBinfo.ProteinName;
-                let modInfo = await getModificationId(curLine[1].toUpperCase(),curLine[12]);
-                linesArr[i].Modification = modInfo.modification;
-                linesArr[i].PeptideType = modInfo.PeptideType;
-                linesArr[i].peptideId = await addPeptideInfo(linesArr[i]);
+            let headerKey = {};
+            let headerArr = ['Compound Group','Compound Name','ISTD?','Precursor Ion','MS1 Res','Product Ion','MS2 Res','Dwell','Fragmentor','Optimized CE','Cell Accelerator Voltage','Ion Name','Modifications'];
 
-            }
-            
-            for(let i=0; i < linesArr.length; i++){
-                let result = await addTrans(linesArr[i]);
-                //console.log(result);
-            }
-
-            //console.log(linesArr);
-
-            console.log('done')
-        }
-    })
-});
-
-
-router.post('/uploadNewPeptide', async (req,res,next) => {
-    //read masterDB
-    let allPeptideInfo = await readJSONToFile('masterDB');
-    if(!(allPeptideInfo['error'] === undefined)){
-        console.log(allPeptideInfo['error']);
-        allPeptideInfo = {};
-    }
-    upload(req, res, async function (err){
-        if(err){
-            res.send({error: err});
-            console.log(err)
-        }else{
-            try{
-            
-                //console.log(req.file);
-                console.log("file uploaded!");
-                console.log("reading file");
-
-                let lines = fs.readFileSync(req.file.path, 'utf-8').split('\r\n').filter(Boolean);
+            if(isValidateFile(headerArr,lines[0],headerKey)){
+                //console.log(headerKey);
 
                 //check if the file is valid should be performed here
                 let linesArr = []
                 for(let i = 0; i < lines.length-1; i++){
                     let curLine = lines[i+1].split(',');
                     linesArr.push({
-                        AccessionNumber: curLine[0],
-                        CatalogNumber: curLine[1],
-                        ProteinSymbol: curLine[2],
-                        Peptide: curLine[3].toUpperCase(),
-                        PeptideType: curLine[5],
-                        PeptideQuality: curLine[6],
-                        
+                        CatalogNumber: curLine[headerKey[headerArr[0]]],
+                        Peptide: curLine[headerKey[headerArr[1]]].toUpperCase(),
+                        istd: curLine[headerKey[headerArr[2]]],
+                        Precursor_Ion: parseFloat(curLine[headerKey[headerArr[3]]]),
+                        MS1_Res: curLine[headerKey[headerArr[4]]],
+                        Product_Ion: parseFloat(curLine[headerKey[headerArr[5]]]),
+                        MS2_Res: curLine[headerKey[headerArr[6]]],
+                        Dwell: Number(curLine[headerKey[headerArr[7]]]),
+                        OptimizedCE: parseFloat(curLine[headerKey[headerArr[9]]]),
+                        Cell_Accelerator_Voltage: Number(curLine[headerKey[headerArr[10]]]),
+                        Ion_Name: curLine[headerKey[headerArr[11]]],
+                        FromFile: req.file.filename,
+                        ModificationString: curLine[headerKey[headerArr[12]]]
                     });
-                    //console.log(curLine[7]);
-                    let masterDBinfo = retrieveUniprotInfo(linesArr[i].Peptide,allPeptideInfo);
-                    linesArr[i].UniprotAccession = masterDBinfo.UniprotAccession;
-                    linesArr[i].GeneSymbol = masterDBinfo.GeneSymbol;
-                    linesArr[i].Species = masterDBinfo.Species;
-                    linesArr[i].ProteinName = masterDBinfo.ProteinName;
-                    let modInfo = await getModificationId(curLine[3].toUpperCase(),curLine[7]);
-                    //console.log(modInfo);
+
+                    let modInfo = await getModificationId(linesArr[i].Peptide,linesArr[i].ModificationString);
                     linesArr[i].Modification = modInfo.modification;
-                    //linesArr[i].PeptideType = modInfo.PeptideType;
+                    linesArr[i].PeptideType = modInfo.PeptideType;
                     linesArr[i].peptideId = await addPeptideInfo(linesArr[i]);
+
                 }
-                res.send({upload: "success"});
+                
+                for(let i=0; i < linesArr.length; i++){
+                    let result = await addTrans(linesArr[i]);
+                    if(result.error !== undefined){
+                        console.log("error uploading trans:",result.error);
+                        if(!finalResult.hasOwnProperty('error')){
+                            finalResult.error = [];
+                        }
+                        finalResult.error.push("line " + i + " " + result.error);
+                    }
+                }
+                finalResult.status = "Trans added, info will be updated shortly";
+                if(finalResult.error !== undefined){
+                    finalResult.status ="Error uploading transitions! Check server for more information!";
+                }
+                updateWithUniprotInfo(linesArr);
+                res.send(finalResult);
+                console.log(finalResult);
+                console.log('done')
+            }else{
+                res.send({status:'Not a valid Transition file, please check!'});
+                fs.unlink(req.file.path,()=>{});
+            }
+        }
+    })
+});
+
+
+router.post('/uploadNewPeptide', async (req,res,next) => {
+
+    upload(req, res, async function (err){
+        let finalResult = {};
+        if(err){
+            res.send({status: err});
+            console.log(err)
+        }else{
+            try{         
+                //console.log(req.file);
+                console.log("file uploaded!");
+                console.log("reading file");
+
+                let lines = fs.readFileSync(req.file.path, 'utf-8').split('\r\n').filter(Boolean);
+
+                let headerKey = {};
+                let headerArr = ['Accession Number','Catalog_Number','Symbol','Peptide','Length (amino acid)','Type','Quality','Modification'];
+                
+                if(isValidateFile(headerArr,lines[0],headerKey)){
+                    //check if the file is valid should be performed here
+                    let linesArr = []
+                    for(let i = 0; i < lines.length-1; i++){
+                        let curLine = lines[i+1].split(',');
+                        linesArr.push({
+                            AccessionNumber: curLine[headerKey[headerArr[0]]],
+                            CatalogNumber: curLine[headerKey[headerArr[1]]],
+                            ProteinSymbol: curLine[headerKey[headerArr[2]]],
+                            Peptide: curLine[headerKey[headerArr[3]]].toUpperCase(),
+                            PeptideType: curLine[headerKey[headerArr[5]]],
+                            PeptideQuality: curLine[headerKey[headerArr[6]]],
+                            
+                        });
+                        
+                        let modInfo = await getModificationId(linesArr[i].Peptide,curLine[headerKey[headerArr[7]]]);
+                        //console.log(modInfo);
+                        linesArr[i].Modification = modInfo.modification;
+                        //linesArr[i].PeptideType = modInfo.PeptideType;
+                        linesArr[i].peptideId = await addPeptideInfo(linesArr[i]);
+                    }
+                    finalResult.status = "Peptides added, info will be updated shortly";
+                    updateWithUniprotInfo(linesArr);
+                    res.send(finalResult);
+                    console.log('done')
+                }else{
+                    res.send({status:'Not a valid peptide file, please check!'});
+                    fs.unlink(req.file.path,()=>{});
+                }
             }
             catch(err){
-                res.send({"error":err});
+                res.send({status:err});
             }
-            //console.log(linesArr);
-
-            console.log('done')
         }
     })
 });

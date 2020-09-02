@@ -13,9 +13,12 @@
                 <label for="searchColumn">Search by: </label>
                 <select class="form-control" name="searchColumn" id="searchColumn">
                     
-                    <option id="defaultOption" value="Peptide">Peptide</option>
+                    <option id="defaultOption" value="GeneSymbol">Gene Symbol</option>
                     <option value="CatalogNumber">Catalog Number</option>
+                    <option value="UniprotAccession">Uniprot Accession</option>
                     <option value="ProteinSymbol">Protein Symbol</option>
+
+                    <option value="Species">Species</option>
                 </select> 
             </div>
             <div class="col-2 p-4">
@@ -34,9 +37,12 @@
         <div class="col-6">
             <button class="form-control btn btn-info" id="searchBtn">Search</button>
         </div>
+        <div class="col-3 d-flex justify-content-end align-items-center">
+            <a href='/'>Back to Home</a>
+        </div>
     </div>
-        
-
+    
+</div>
     
 </div>
 <script src="/frontendJS/search.js"></script>
