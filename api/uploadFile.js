@@ -4,7 +4,7 @@ const pool = require('../dbcon.js').pool;
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const readline = require('readline');
+const uploadFileHeaders = require('../importFileHeaders.js').fileHeaders;
 
 //<-----------multer storage engine setup----------------->
 let storage = multer.diskStorage({
@@ -811,7 +811,7 @@ router.post('/uploadTrans', async (req,res,next) => {
             let lines = fs.readFileSync(req.file.path, 'utf-8').split('\r\n').filter(Boolean);  //this is limited to 2GB
 
             let headerKey = {};
-            let headerArr = ['Compound Group','Compound Name','ISTD?','Precursor Ion','MS1 Res','Product Ion','MS2 Res','Dwell','Fragmentor','Optimized CE','Cell Accelerator Voltage','Ion Name','Modifications'];
+            let headerArr = uploadFileHeaders.transFile;
 
             if(isValidateFile(headerArr,lines[0],headerKey)){
                 //console.log(headerKey);
@@ -886,7 +886,7 @@ router.post('/uploadNewPeptide', async (req,res,next) => {
                 let lines = fs.readFileSync(req.file.path, 'utf-8').split('\r\n').filter(Boolean);
 
                 let headerKey = {};
-                let headerArr = ['Accession Number','Catalog_Number','Symbol','Peptide','Length (amino acid)','Type','Quality','Modification'];
+                let headerArr = uploadFileHeaders.peptideFile;
                 
                 if(isValidateFile(headerArr,lines[0],headerKey)){
                     //check if the file is valid should be performed here
@@ -923,6 +923,40 @@ router.post('/uploadNewPeptide', async (req,res,next) => {
             }
         }
     })
+});
+
+router.post('/sampleTemplate', (req,res,next) => {
+    
+    let headerArr = uploadFileHeaders.transFile;
+    let sampleEntry = uploadFileHeaders.transEx;
+    let filename = 'SampleTransFile.csv';
+    if(req.body.fileType == 'peptide'){
+        headerArr = uploadFileHeaders.peptideFile;
+        sampleEntry = uploadFileHeaders.peptideEx;
+        filename = 'SamplePeptideFile.csv';
+    }
+    try{
+        let lineToWrite = '';
+        headerArr.forEach((header)=>{
+            lineToWrite = lineToWrite + ',' + header;
+        });
+        lineToWrite = lineToWrite.substr(1,lineToWrite.length-1);
+
+        let sampleToWrite = '';
+        sampleEntry.forEach((item)=>{
+            sampleToWrite = sampleToWrite + ',' + item;
+        })
+        sampleToWrite = sampleToWrite.substr(1,sampleToWrite.length-1);
+        
+        lineToWrite = lineToWrite + '\n' + sampleToWrite;
+
+        fs.writeFileSync(path.join('./public/download/' + filename), lineToWrite, 'utf8');
+
+        res.send({filelink:path.join('/download/' + filename)});
+    }catch(err){
+        res.send({"error":err});
+    }
+    
 });
 
 module.exports = router;

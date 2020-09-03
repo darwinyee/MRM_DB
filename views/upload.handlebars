@@ -4,7 +4,9 @@
     </div>
     <hr>
     <form id="uploadTrans" method="post" enctype="multipart/form-data" name="uploadTrans">
-        <label for="uploadTransFile">Select a Transition file to upload: </label>
+        <label for="uploadTransFile">
+            Select a Transition file to upload:
+            <button class="btn btn-sm btn-link" id="transTemplate">Sample Template</button></label>
         <input type="file" class="form-control" id="uploadTransFile" name="uploadFile">  
     </form>
     <div class="row">
@@ -17,7 +19,10 @@
     <hr>
     
     <form id="uploadNewPeptide" method="post" enctype="multipart/form-data" name="uploadNewPeptide">
-        <label for="uploadNewPeptideFile">Select a peptide file to upload: </label>
+        <label for="uploadNewPeptideFile">
+            Select a peptide file to upload:
+            <button class="btn btn-sm btn-link" id="peptideTemplate">Sample Template</button></label>
+        </label>
         <input type="file" class="form-control" id="uploadNewPeptideFile" name="uploadFile">
     </form>
     <div class="row">

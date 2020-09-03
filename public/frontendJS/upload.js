@@ -104,6 +104,46 @@ document.getElementById('uploadNewPeptideFileBtn').addEventListener('click', (ev
     }
 });
 
+document.getElementById('transTemplate').addEventListener('click', (event) => {
+    event.preventDefault();
+    getTemplate('trans');
+});
+
+document.getElementById('peptideTemplate').addEventListener('click', (event) => {
+    event.preventDefault();
+    getTemplate('peptide');
+});
+
+
+function getTemplate(fileType){
+    let payload = {fileType:fileType};
+    fetch('/uploadItem/sampleTemplate',{
+        method:'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+      .then((data1) => {
+          return data1.json();
+      })
+      .then((data2) => {
+          if(data2.error !== undefined){
+              alert(data2.error);
+          }else{
+              //add a link and click on it to download the trans
+            let downLnk = document.createElement("a");
+            document.body.appendChild(downLnk);
+            downLnk.id = 'templink1';
+            downLnk.style = "display:none";
+            downLnk.download = "";
+            downLnk.href = data2.filelink;
+            downLnk.click();
+            document.body.removeChild(downLnk);
+          }
+      })
+      .catch((err) => {
+          alert(err);
+      })
+}
 
 function hideModalAfterMillisecond(milliseconds){
     setTimeout(()=>{
