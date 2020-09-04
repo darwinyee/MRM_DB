@@ -66,14 +66,16 @@ function queryDB(criteria, table, shouldMatchAll){   //criteria is {column,value
 
 //<-----------Update transition table in database----------------->
 function insertTrans(trans){
-    //console.log(trans)
+    console.log(trans)
     let promise = new Promise((resolve, reject) => {
 
         pool.query('INSERT INTO transitions (CatalogNumber,Peptide,istd,Precursor_Ion,MS1_Res,Product_Ion,MS2_Res,Dwell,OptimizedCE,Ion_Name,peptideId,ModificationString,FromFile)' + 
-                    ' VALUES (?,?,?,?,?,?,?,?,?,?,?)', 
+                    ' VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', 
                     [trans.CatalogNumber,trans.Peptide,trans.istd,trans.Precursor_Ion,trans.MS1_Res,trans.Product_Ion,trans.MS2_Res,trans.Dwell,trans.OptimizedCE,trans.Ion_Name,trans.peptideId,trans.ModificationString,trans.FromFile],
                     (err,result)=>{
                         if(err){
+                            console.log(err)
+                            console.log(trans);
                             resolve({"error":err});
                         }else{
                             resolve({"insertID":result.insertId});
@@ -106,6 +108,7 @@ function updateTrans(trans, id){
                     trans.FromFile 
                    ],(err, result)=>{
                         if(err){
+                            console.log(err);
                             resolve({"error":err});
                         }else{
                             resolve({"insertID":result.insertId});
@@ -708,25 +711,89 @@ async function updateWithUniprotInfo(peptideInfoArr){
     //read and update peptideInfo with unipro information
     //upload information to sql database
     console.log("updateWithUniprotInfo");
-    //read masterDB
-    let allPeptideInfo = await readJSONToFile('masterDB');
-    if(!(allPeptideInfo['error'] === undefined)){
-        console.log("updateWithUniprotInfo:",allPeptideInfo['error']);
-        allPeptideInfo = {};
-    }else{
-        for(let i = 0; i < peptideInfoArr.length; i++){
-            console.log("updating ",peptideInfoArr[i].Peptide);
-            let curDBinfo = retrieveUniprotInfo(peptideInfoArr[i].Peptide, allPeptideInfo);
-            peptideInfoArr[i].UniprotAccession = curDBinfo.UniprotAccession;
-            peptideInfoArr[i].GeneSymbol = curDBinfo.GeneSymbol;
-            peptideInfoArr[i].Species = curDBinfo.Species;
-            peptideInfoArr[i].ProteinName = curDBinfo.ProteinName;
-            await addPeptideInfo(peptideInfoArr[i]);
-        }
-        console.log("updateWithUniprotInfo: Done");
+
+    //if peptideInfoArr is empty, then it means update current db peptides
+    if(peptideInfoArr.length == 0){
+        let queryResult = await queryDB({},"heavypeptide_info",true);
+        //console.log(queryResult);
+
+        for(let i = 0; i < queryResult['queryResult'].length; i++){
+            peptideInfoArr.push({Peptide:queryResult['queryResult'][i].Peptide,
+                                 AccessionNumber:queryResult['queryResult'][i].AccessionNumber,
+                                 CatalogNumber:queryResult['queryResult'][i].CatalogNumber,
+                                 ProteinSymbol:queryResult['queryResult'][i].ProteinSymbol,
+                                 PeptideType:queryResult['queryResult'][i].PeptideType,
+                                 PeptideQuality:queryResult['queryResult'][i].PeptideQuality,
+                                 InStock:queryResult['queryResult'][i].InStock,
+                                 StorageLocation:queryResult['queryResult'][i].StorageLocation,
+
+                                });
+        }           
+        
     }
 
+
+    if(peptideInfoArr.length > 0){
+        //read masterDB
+        let allPeptideInfo = await readJSONToFile('masterDB');
+        if(!(allPeptideInfo['error'] === undefined)){
+            console.log("updateWithUniprotInfo:",allPeptideInfo['error']);
+            allPeptideInfo = {};
+        }else{
+            for(let i = 0; i < peptideInfoArr.length; i++){
+                console.log("updating ",peptideInfoArr[i].Peptide);
+                let curDBinfo = retrieveUniprotInfo(peptideInfoArr[i].Peptide, allPeptideInfo);
+                peptideInfoArr[i].UniprotAccession = curDBinfo.UniprotAccession;
+                peptideInfoArr[i].GeneSymbol = curDBinfo.GeneSymbol;
+                peptideInfoArr[i].Species = curDBinfo.Species;
+                peptideInfoArr[i].ProteinName = curDBinfo.ProteinName;
+                await updateOneUniprotInfo(peptideInfoArr[i]);
+                //console.log(peptideInfoArr[i]);
+            }
+        }
+    }
+    console.log("updateWithUniprotInfo: Done");
+
 }
+
+function updateOneUniprotInfo(peptideInfo){
+    let promise = new Promise(async (resolve, reject) => {
+        //assuming the peptide exists in the database, use only if the peptide is already in the database
+
+        //first get the id
+        let queryResult = await queryDB({'CatalogNumber':peptideInfo.CatalogNumber},'heavypeptide_info',true);
+        if(queryResult['error'] !== undefined){
+            console.log(queryResult['error']);
+            resolve(queryResult);
+        }else{
+            if(queryResult['queryResult'].length == 0){
+                console.log("peptide not found");
+                resolve({error:"peptide not found"});
+            }else{
+                //update uniprot info for this peptide, should only be one
+                let oldPeptideInfo = queryResult['queryResult'][0];
+                pool.query('UPDATE heavypeptide_info SET UniprotAccession=?,GeneSymbol=?,Species=?,ProteinName=?' + 
+                           ' WHERE id=' + oldPeptideInfo.id, 
+                           [peptideInfo.UniprotAccession || oldPeptideInfo.UniprotAccession,
+                            peptideInfo.GeneSymbol || oldPeptideInfo.GeneSymbol,
+                            peptideInfo.Species || oldPeptideInfo.Species,
+                            peptideInfo.ProteinName || oldPeptideInfo.ProteinName
+                            ], (err, result)=>{
+                                if(err){
+                                    console.log(err);
+                                    resolve({error:err});
+                                }else{
+                                    console.log(oldPeptideInfo.Peptide + ' updated');
+                                    resolve({status:oldPeptideInfo.Peptide + " updated"});
+                                }
+                            });
+            }
+        }
+
+    })
+    return promise;
+}
+
 //<-----------End Update database Peptide information with Uniprot database information----------------->
 
 
@@ -786,7 +853,9 @@ router.post('/uploadProteinDB', (req,res,next) => {
 
             //write JSON to file
             let writeJSONresult = await saveJSONToFile(allPeptideInfo, 'masterDB');
-            res.send({status:writeJSONresult});
+            let temp = [];
+            updateWithUniprotInfo(temp);
+            res.send({status:writeJSONresult + " ,Database peptides will be updated shortly"});
             //console.log(allPeptideInfo);
             console.log('proteinct: ' + proteinCt);    
             //console.log(retrieveUniprotInfo("GEYLPLLQGK",allPeptideInfo));          
@@ -846,7 +915,7 @@ router.post('/uploadTrans', async (req,res,next) => {
                 for(let i=0; i < linesArr.length; i++){
                     let result = await addTrans(linesArr[i]);
                     if(result.error !== undefined){
-                        console.log("error uploading trans:",result.error);
+                        console.log("error uploading trans:",result.error + '\n' + JSON.stringify(linesArr[i]));
                         if(!finalResult.hasOwnProperty('error')){
                             finalResult.error = [];
                         }
