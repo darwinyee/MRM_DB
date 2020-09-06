@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../dbcon.js').pool;
 const path = require('path');
+const fileHeaders = require('../importFileHeaders.js').fileHeaders;
 
 
 function reformatOutput(result){
@@ -28,7 +29,7 @@ function reformatOutput(result){
                     'Location' : thisPeptide.StorageLocation,
                     'id' : thisPeptide.id,
                     'Modifications' : thisPeptide.Modification + `(${thisPeptide.modPosition})`,
-                    'Transitions' : await getTransitionInfo(thisPeptide.id),
+                    'Transitions' : await getTransitionInfo(thisPeptide.id, 'trans'),
                     'Uniprot#' : thisPeptide.UniprotAccession,
                     'Gene Symbol' : thisPeptide.GeneSymbol,
                     'Species' : thisPeptide.Species,
@@ -51,19 +52,24 @@ function reformatOutput(result){
     
 }
 
-function getTransitionInfo(peptideId){
+function getTransitionInfo(peptideId, fileType){
     let promise = new Promise((resolve, reject)=>{
         //make sql query to get transition information for a particular peptide.
-        pool.query('SELECT * FROM transitions WHERE peptideId = \'' + peptideId + '\'',(err, result) => {
+        let queryString = 'SELECT * FROM heavypeptide_info WHERE id = \'' + peptideId + '\'';
+        if(fileType == 'trans'){
+            queryString = 'SELECT * FROM transitions WHERE peptideId = \'' + peptideId + '\'';
+        }
+
+        pool.query(queryString,(err, result) => {
             if(err){
-                resolve({hasTransitions : false});
+                resolve({hasData : false});
             }else{  
                 if(result.length == 0){
-                    resolve({hasTransitions : false});
+                    resolve({hasData : false});
                 }else{
                     resolve({
-                        hasTransitions : true,
-                        transitions : result
+                        hasData : true,
+                        queryResult : result
                     });
                 }
             }
@@ -73,26 +79,44 @@ function getTransitionInfo(peptideId){
     return promise;
 }
 
-function saveTransToFile(trans){
+function saveToFile(trans, fileType){
     let promise = new Promise((resolve, reject) => {
         try{
             let fs = require('fs');
 
-            let filename = 'translist' + Date.now() + '.csv';
+            let filename = 'peptideList' + Date.now() + '.csv';
+            
+            let headerArr = fileHeaders.fullPeptideFile;
+            if(fileType == 'trans'){
+                filename = 'translist' + Date.now() + '.csv';
+                headerArr = fileHeaders.transFile;
+            }
             let pathname = '/download/'+filename;
+            let lineToWrite = '';
+            headerArr.forEach((item)=>{
+                lineToWrite = lineToWrite + ',' + item;
+            })
+            lineToWrite = lineToWrite.substr(1,lineToWrite.length-1);
+            lineToWrite = lineToWrite + '\n';
 
-            let lineToWrite = "CatalogNumber,Peptide,istd,Precursor Ion,MS1 Res,Product Ion,MS2 Res,Dwell,Fragmentor,Optimized CE,Cell Accelerator Voltage, Ion Name, Modifications\n";
+            //"CatalogNumber,Peptide,istd,Precursor Ion,MS1 Res,Product Ion,MS2 Res,Dwell,Fragmentor,Optimized CE,Cell Accelerator Voltage, Ion Name, Modifications\n";
             for(let i = 0; i < trans.length; i++){
-                let curLine = trans[i].CatalogNumber + ',' + trans[i].Peptide + ',' + trans[i].istd + ',' +
+                let curLine = trans[i].AccessionNumber + ',' + trans[i].CatalogNumber + ',' + trans[i].ProteinSymbol + ',' +
+                              trans[i].Peptide + ',' + trans[i].PeptideType + ',' + trans[i].PeptideQuality + ',' +
+                              trans[i].InStock + ',' + trans[i].StorageLocation + ',' + trans[i].UniprotAccession + ',' +
+                              trans[i].GeneSymbol + ',' + trans[i].Species + ',' + trans[i].ProteinName;
+                if(fileType == 'trans'){
+                    curLine = trans[i].CatalogNumber + ',' + trans[i].Peptide + ',' + trans[i].istd + ',' +
                             trans[i].Precursor_Ion + ',' + trans[i].MS1_Res + ',' + trans[i].Product_Ion + ',' +
                             trans[i].MS2_Res + ',' + trans[i].Dwell + ',' + trans[i].Fragmentor + ',' +
                             trans[i].OptimizedCE + ',' + trans[i].Cell_Accelerator_Voltage + ',' + trans[i].Ion_Name + ',' + trans[i].ModificationString;
+                }
+
                 lineToWrite = lineToWrite + curLine + "\n";
             }
 
             console.log(lineToWrite);
             fs.writeFileSync(path.join('./public/download/' + filename), lineToWrite, 'utf8');
-            //fs.close();
             resolve(pathname);
         }
         catch(err){
@@ -103,21 +127,23 @@ function saveTransToFile(trans){
     return promise;
 }
 
-router.post('/downloadTrans', async (req,res,next)=>{
+
+router.post('/download', async (req,res,next)=>{
     //req.peptideIds = array of peptide ids
     try{
         let trans = [];
+        let fileType = req.body.fileType;
         for (let i = 0; i < req.body.peptideIds.length; i++){
             console.log(req.body.peptideIds[i]);
-            let curTrans = await getTransitionInfo(req.body.peptideIds[i]);
-            if(curTrans.hasTransitions){
-                for (let j = 0; j < curTrans.transitions.length; j++){
-                    trans.push(curTrans.transitions[j]);
+            let curTrans = await getTransitionInfo(req.body.peptideIds[i], fileType);
+            if(curTrans.hasData){
+                for (let j = 0; j < curTrans.queryResult.length; j++){
+                    trans.push(curTrans.queryResult[j]);
                 }
             }
         }
         //console.log(trans);
-        let finalFile = await saveTransToFile(trans);
+        let finalFile = await saveToFile(trans, fileType);
         let errRegex = /\.csv/;
         if(errRegex.test(finalFile)){
            res.send({filelink: finalFile});

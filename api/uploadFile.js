@@ -358,8 +358,8 @@ function getModificationId(peptide, modificationString){
                         result['PeptideType'] = 'heavy';
                     }
 
-                    Modification = (found.groups.Modification == 'PO3H2')?'Pho'
-                                    + found.groups.aminoAcid:Modification;
+                    Modification = (found.groups.Modification == 'PO3H2')?'Pho'+ found.groups.aminoAcid:Modification;
+                    Modification = (found.groups.Modification == 'Ox')?'Ox'+ found.groups.aminoAcid:Modification;
                     let queryResult = await queryDB({'Modification': Modification}, 'modifications', true);
                     result['modification'].push({
                         id: queryResult['queryResult'][0].id,

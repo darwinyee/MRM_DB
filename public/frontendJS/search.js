@@ -109,6 +109,11 @@ function printData(receivedData){  //write html table
         downloadAllTrans.textContent = "Download All Transitions";
         downloadAllTrans.setAttribute('onclick', 'downloadAllTrans()');
         container.appendChild(downloadAllTrans);
+        let downloadAllPeptide = document.createElement("button");
+        downloadAllPeptide.className = "btn btn-info mx-2";
+        downloadAllPeptide.textContent = "Download All Peptide Information";
+        downloadAllPeptide.setAttribute('onclick', 'downloadAllPeptide()');
+        container.appendChild(downloadAllPeptide);
 
         let container2 = document.createElement("div");
         container2.className = "row justify-content-center";
@@ -144,22 +149,29 @@ function printData(receivedData){  //write html table
                 if(headerArr[j] == 'Peptide'){
                     thisCol.innerHTML = highlightAminoAcid(receivedData.searchResult[i][headerArr[j]],receivedData.searchResult[i]['Modifications']);
                 }else if(headerArr[j] == 'Transitions'){
-                    if(receivedData.searchResult[i]['Transitions'].hasTransitions){
+                    
+                    if(receivedData.searchResult[i]['Transitions'].hasData){
                         let downloadLink = document.createElement("button");
                         downloadLink.id = 'trans' + receivedData.searchResult[i]['id'];
-                        downloadLink.setAttribute('onClick', `downloadTrans([${receivedData.searchResult[i]["id"]}])`);
+                        downloadLink.setAttribute('onClick', `downloadTrans([${receivedData.searchResult[i]["id"]}],'trans')`);
                         downloadLink.className = "btn btn-info";
                         downloadLink.textContent = "Download";
                         thisCol.appendChild(downloadLink);
                         //hidden span for peptide id with trans info
-                        let peptideIdSpan = document.createElement("span");
-                        peptideIdSpan.className = "peptideIdWithTrans";
-                        peptideIdSpan.style = "display:none";
-                        peptideIdSpan.textContent = receivedData.searchResult[i]['id'];
-                        thisCol.appendChild(peptideIdSpan);
+                        let peptideIdWithTransSpan = document.createElement("span");
+                        peptideIdWithTransSpan.className = "peptideIdWithTrans";
+                        peptideIdWithTransSpan.style = "display:none";
+                        peptideIdWithTransSpan.textContent = receivedData.searchResult[i]['id'];
+                        thisCol.appendChild(peptideIdWithTransSpan);
                     }else{
                         thisCol.textContent = 'Unavailable';
                     }
+
+                    let peptideIdSpan = document.createElement("span");
+                        peptideIdSpan.className = "peptideId";
+                        peptideIdSpan.style = "display:none";
+                        peptideIdSpan.textContent = receivedData.searchResult[i]['id'];
+                        thisCol.appendChild(peptideIdSpan);
                 }else{
                     thisCol.textContent = receivedData.searchResult[i][headerArr[j]];
                 }
@@ -177,14 +189,15 @@ function printData(receivedData){  //write html table
     body.appendChild(container);
 }
 
-async function downloadTrans(peptideIds){
+async function downloadTrans(peptideIds,fileType){
     //make post request to build download link to download trans
     let payload = {
-        peptideIds : peptideIds
+        peptideIds : peptideIds,
+        fileType : fileType
     }
     console.log(payload);
 
-    await fetch('/api/downloadTrans',{
+    await fetch('/api/download',{
         method: 'POST',
         headers: { 'Content-Type' : 'application/json'},
         body: JSON.stringify(payload)
@@ -220,8 +233,24 @@ async function downloadAllTrans(){
         alert("Peptides have no transitions information.");
     }else{
         console.log(idList);
-        await downloadTrans(idList);
+        await downloadTrans(idList,'trans');
         alert("Transitions downloaded!");
+    }
+    
+}
+
+async function downloadAllPeptide(){
+    let idElements = document.getElementsByClassName("peptideId");
+    let idList = [];
+    for(let i = 0; i < idElements.length; i++){
+        idList.push(idElements[i].textContent);
+    }
+    if(idList.length == 0){
+        alert("No Peptides found");
+    }else{
+        console.log(idList);
+        await downloadTrans(idList,'peptide');
+        alert("Peptide Information downloaded!");
     }
     
 }
