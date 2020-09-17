@@ -73,9 +73,9 @@ let methods = {
         //{b+:[b1,b2,....],b++:[],y+:[y1,y2,...],y++[]}
 
         let result = {};
-
+        let curProductCharge = '';
         for(let productCharge = 1; productCharge <= productMaxCharge; productCharge++){
-            let curProductCharge = '+';
+            curProductCharge = curProductCharge + '+';
             for(let i = 0; i < peptideSeq.length-1; i++){  //only from 1 to n-1 peptide length
                 //b-ion
                 let bIonName = 'b'+ (i + 1);
