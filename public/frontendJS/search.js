@@ -57,6 +57,18 @@ function getSearchPayload(){
     return payload;
 }
 
+function checkAllPeptide(){
+    let checkStatus = document.getElementById("checkAllBoxes").checked;
+    let peptideCheckboxes = document.getElementsByClassName("peptideCheckbox");
+    for(let i = 0; i < peptideCheckboxes.length; i++){
+        peptideCheckboxes[i].checked=checkStatus;
+    }
+}
+
+function showHideText(e){
+    e.className = e.className == "ellipsisCellWord"?"showEllipsisCellWord":"ellipsisCellWord";
+}
+
 /*
 function performInsert(){
     let payload = {fileLink:document.getElementById("insertItem").value,
@@ -106,17 +118,17 @@ function printData(receivedData){  //write html table
         container.appendChild(textMsg);
         let downloadAllTrans = document.createElement("button");
         downloadAllTrans.className = "btn btn-info";
-        downloadAllTrans.textContent = "Download All Transitions";
+        downloadAllTrans.textContent = "Download Selected Transitions";
         downloadAllTrans.setAttribute('onclick', 'downloadAllTrans()');
         container.appendChild(downloadAllTrans);
         let downloadAllPeptide = document.createElement("button");
         downloadAllPeptide.className = "btn btn-info mx-2";
-        downloadAllPeptide.textContent = "Download All Peptide Information";
+        downloadAllPeptide.textContent = "Download Selected Peptide Information";
         downloadAllPeptide.setAttribute('onclick', 'downloadAllPeptide()');
         container.appendChild(downloadAllPeptide);
 
         let container2 = document.createElement("div");
-        container2.className = "row justify-content-center";
+        container2.className = "row justify-content-center tableContainer1";
         let col1 = document.createElement("div");
         col1.className = "col-12";
         let table = document.createElement("table");
@@ -125,6 +137,14 @@ function printData(receivedData){  //write html table
         let headerArr = ['Catalog#','Uniprot#','Gene Symbol','Species','Peptide','Type','Quality','Modifications','Transitions'];
         let thead = document.createElement("thead");
         let theadrow = document.createElement("tr");
+        let thCheckAll = document.createElement("th");
+        thCheckAll.setAttribute('style','width:5px');
+        let checkAllInput = document.createElement("input");
+        checkAllInput.setAttribute("type","checkbox");
+        checkAllInput.setAttribute("onclick", 'checkAllPeptide()');
+        checkAllInput.id = "checkAllBoxes";
+        thCheckAll.appendChild(checkAllInput);
+        theadrow.appendChild(thCheckAll);
         for(let i = 0; i < headerArr.length; i++){
             let temp = document.createElement("th");
             if(headerArr[i] == 'Peptide'){
@@ -144,8 +164,19 @@ function printData(receivedData){  //write html table
         let tbody = document.createElement("tbody");
         for(let i = 0; i < receivedData.searchResult.length; i++){
             let thisRow = document.createElement("tr");
+            let checkCol = document.createElement("td");
+            let checkboxCol = document.createElement("input");
+            checkboxCol.setAttribute("type", "checkbox");
+            checkboxCol.className = "peptideCheckbox";
+            checkboxCol.id = receivedData.searchResult[i]["id"];
+            checkCol.appendChild(checkboxCol);
+            thisRow.appendChild(checkCol);
             for(let j = 0; j < headerArr.length; j++){
                 let thisCol = document.createElement("td");
+                if(headerArr[j] == 'Uniprot#' || headerArr[j] == 'Gene Symbol' || headerArr[j] == 'Species'){
+                    thisCol.className = "ellipsisCellWord";
+                    thisCol.setAttribute('onclick','showHideText(this)');
+                }
                 if(headerArr[j] == 'Peptide'){
                     thisCol.innerHTML = highlightAminoAcid(receivedData.searchResult[i][headerArr[j]],receivedData.searchResult[i]['Modifications']);
                 }else if(headerArr[j] == 'Transitions'){
@@ -224,11 +255,22 @@ async function downloadTrans(peptideIds,fileType){
 }
 
 async function downloadAllTrans(){
-    let idElements = document.getElementsByClassName("peptideIdWithTrans");
+    let idElements = [...document.getElementsByClassName("peptideIdWithTrans")]
+    let idsWithTrans = [];
+    idElements.forEach((eachElement,index) => {
+                                                idsWithTrans.push(eachElement.textContent);
+                                              });
+    let allPeptidesCheckboxes = [...document.getElementsByClassName("peptideCheckbox")];
     let idList = [];
-    for(let i = 0; i < idElements.length; i++){
-        idList.push(idElements[i].textContent);
-    }
+    allPeptidesCheckboxes.forEach((eachBox,index) => {
+                                        
+                                        if(eachBox.checked){
+                                            if(idsWithTrans.indexOf(eachBox.id) != -1){
+                                                idList.push(eachBox.id);
+                                            }
+                                        }
+                                    });
+    
     if(idList.length == 0){
         alert("Peptides have no transitions information.");
     }else{
@@ -240,11 +282,14 @@ async function downloadAllTrans(){
 }
 
 async function downloadAllPeptide(){
-    let idElements = document.getElementsByClassName("peptideId");
+    let allPeptidesCheckboxes = [...document.getElementsByClassName("peptideCheckbox")];
     let idList = [];
-    for(let i = 0; i < idElements.length; i++){
-        idList.push(idElements[i].textContent);
-    }
+    allPeptidesCheckboxes.forEach((eachBox,index) => {
+        if(eachBox.checked){
+            idList.push(eachBox.id);
+        }
+    })
+
     if(idList.length == 0){
         alert("No Peptides found");
     }else{

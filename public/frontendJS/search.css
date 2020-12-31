@@ -7,3 +7,21 @@
 td, th {
     word-wrap:break-word;
 }
+
+.tableContainer1{
+    margin-top:20px;
+    max-height:65vh;
+    overflow:scroll;
+}
+
+.ellipsisCellWord{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+.showEllipsisCellWord{
+    white-space:normal;
+    text-overflow:unset;
+    overflow:unset;
+}

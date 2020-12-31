@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../dbcon.js').pool;
 const path = require('path');
 const fileHeaders = require('../importFileHeaders.js').fileHeaders;
-
+const peptideMassFunctions = require('../peptideMassFunctions.js').massFunctions;
 
 function reformatOutput(result){
     //result is not empty
@@ -29,7 +29,7 @@ function reformatOutput(result){
                     'Location' : thisPeptide.StorageLocation,
                     'id' : thisPeptide.id,
                     'Modifications' : thisPeptide.Modification + `(${thisPeptide.modPosition})`,
-                    'Transitions' : await getTransitionInfo(thisPeptide.id, 'trans'),
+                    'Transitions' : await getTransitionInfo(thisPeptide.id, 'trans', false),
                     'Uniprot#' : thisPeptide.UniprotAccession,
                     'Gene Symbol' : thisPeptide.GeneSymbol,
                     'Species' : thisPeptide.Species,
@@ -52,7 +52,7 @@ function reformatOutput(result){
     
 }
 
-function getTransitionInfo(peptideId, fileType){
+function getTransitionInfo(peptideId, fileType, includeTransDetails){
     let promise = new Promise((resolve, reject)=>{
         //make sql query to get transition information for a particular peptide.
         let queryString = 'SELECT * FROM heavypeptide_info WHERE id = \'' + peptideId + '\'';
@@ -60,13 +60,23 @@ function getTransitionInfo(peptideId, fileType){
             queryString = 'SELECT * FROM transitions WHERE peptideId = \'' + peptideId + '\'';
         }
 
-        pool.query(queryString,(err, result) => {
+        pool.query(queryString, async (err, result) => {
             if(err){
                 resolve({hasData : false});
             }else{  
                 if(result.length == 0){
                     resolve({hasData : false});
                 }else{
+                    if(fileType == 'trans' && includeTransDetails){
+                        //include light transitions if type is trans
+                        result = await addLightTrans(result);
+                        //console.log(test);
+                    }
+
+                    if(!includeTransDetails && fileType == 'trans'){
+                        result = "";
+                    }
+
                     resolve({
                         hasData : true,
                         queryResult : result
@@ -75,6 +85,146 @@ function getTransitionInfo(peptideId, fileType){
             }
         });
 
+    });
+    return promise;
+}
+
+function compareTrans(targetedTran, originalTran, ppm){
+    //console.log(targetedTran,originalTran);
+    try{
+        if(peptideMassFunctions.isMatchedMz(targetedTran.Precursor_Ion, originalTran.Precursor_Ion, ppm)){
+            if(peptideMassFunctions.isMatchedMz(targetedTran.Product_Ion, originalTran.Product_Ion, ppm)){
+                return true;
+            }
+        }
+        return false;
+    }catch(err){
+        console.log(err);
+        return false;
+    }
+}
+
+function generateTrans(originalTran, modificationList){
+    //console.log(originalTran);
+    //return a transition object with keys equal columns of transition table
+    let newISTD = (originalTran.istd == 'FALSE')?'TRUE':'FALSE';
+    let newPrecursor = (originalTran.istd == 'FALSE')?peptideMassFunctions.getPrecursorHeavyMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],originalTran.Precursor_Ion):
+                                            peptideMassFunctions.getPrecursorLightMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],originalTran.Precursor_Ion);
+    let newProduct = (originalTran.istd == 'FALSE')?peptideMassFunctions.getTransHeavyMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],3,originalTran.Product_Ion,10):
+                                        peptideMassFunctions.getTransLightMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],3,originalTran.Product_Ion,10); 
+    let newProductMz = -1;
+
+    if(Object.keys(newProduct) != 0){
+        newProductMz = (originalTran.istd == 'FALSE')?newProduct[Object.keys(newProduct)[0]][Object.keys(newProduct[Object.keys(newProduct)[0]])[0]].heavyMW:
+                    newProduct[Object.keys(newProduct)[0]][Object.keys(newProduct[Object.keys(newProduct)[0]])[0]].lightMW;
+    }
+    
+
+    let newTrans = {
+        CatalogNumber: originalTran.CatalogNumber,
+        Peptide: originalTran.Peptide,
+        istd: newISTD,
+        Precursor_Ion: newPrecursor,
+        MS1_Res: originalTran.MS1_Res,
+        Product_Ion: newProductMz,
+        MS2_Res: originalTran.MS2_Res,
+        Dwell: originalTran.Dwell,
+        Fragmentor: originalTran.Fragmentor,
+        OptimizedCE: originalTran.OptimizedCE,
+        Cell_Accelerator_Voltage: originalTran.Cell_Accelerator_Voltage,
+        Ion_Name: originalTran.Ion_Name,
+        peptideId: originalTran.peptideId,
+        ModificationString: originalTran.ModificationString,
+        FromFile: 'Calculated by Server'
+    };
+    //console.log(newTrans);
+    return newTrans;
+
+}
+
+function addLightTrans(queryResult){
+    let promise = new Promise(async (resolve, reject) => {
+
+        let result = [];
+        let transObj = {};  //{CatalogNumber : [{light:,heavy:}]}
+        let catalogNumberModList = {};
+        if(queryResult.length > 0){
+            //get all the catalogNumber and modifications
+            for(let i = 0; i < queryResult.length; i++){
+                if(!catalogNumberModList.hasOwnProperty(queryResult[i].CatalogNumber)){
+                    catalogNumberModList[queryResult[i].CatalogNumber] = await peptideMassFunctions.getModificationId(queryResult[i].Peptide,queryResult[i].ModificationString);
+                }          
+            }
+
+            //build the transObj from queryResult
+            for(let i = 0; i < queryResult.length; i++){
+                let thisTrans = queryResult[i];
+
+                if(!transObj.hasOwnProperty(thisTrans.CatalogNumber)){
+                    transObj[thisTrans.CatalogNumber] = [];
+                }
+
+                //if this is a heavy transition, add{light:calculatedTrans,heavy:thisTrans}
+                if(thisTrans.istd.toUpperCase() == 'TRUE'){
+                    //find the index of existing trans
+                    let existIdx = -1;
+                    let calculatedLight = generateTrans(thisTrans, catalogNumberModList);
+                    //console.log(transObj);
+                    for(let i = 0; i < transObj[thisTrans.CatalogNumber].length; i++){
+                        if(compareTrans(transObj[thisTrans.CatalogNumber][i].light,calculatedLight,10)){
+                            existIdx = i;
+                            i = transObj[thisTrans.CatalogNumber].length;
+                        }
+                    }
+
+                    if(existIdx != -1){
+                        transObj[thisTrans.CatalogNumber][existIdx].heavy = thisTrans;
+                    }else{
+                        transObj[thisTrans.CatalogNumber].push({light:calculatedLight,heavy:thisTrans});                
+                    }
+                }
+
+                //if this is a light transition, only add {light:thisTrans}
+                if(thisTrans.istd.toUpperCase() == 'FALSE'){
+                    //find the index of existing trans
+                    //console.log(transObj);
+                    let existIdx = -1;
+                    for(let i = 0; i < transObj[thisTrans.CatalogNumber].length; i++){
+                        if(compareTrans(transObj[thisTrans.CatalogNumber][i].light,thisTrans,10)){
+                            existIdx = i;
+                            i = transObj[thisTrans.CatalogNumber].length;
+                        }
+                    }
+
+                    if(existIdx != -1){
+                        transObj[thisTrans.CatalogNumber][existIdx].light = thisTrans;
+                    }else{
+                        transObj[thisTrans.CatalogNumber].push({light:thisTrans});
+                    }
+                }
+            }
+
+            //rebuild tranlist
+            for(let catNum in transObj){
+                for(let i = 0; i < transObj[catNum].length; i++){
+                    if(transObj[catNum][i].light.Product_Ion > 0){
+                        result.push(transObj[catNum][i].light);
+                    }else{
+                        console.log("error calculate light");
+                        console.log(transObj[catNum][i]);
+                    }                   
+                }
+                for(let i = 0; i < transObj[catNum].length; i++){
+                    if(transObj[catNum][i].hasOwnProperty('heavy')){
+                        result.push(transObj[catNum][i].heavy);
+                    }
+                }
+            }
+
+        }
+        console.log("result is here:\n")
+        console.log(result);
+        resolve(result);
     });
     return promise;
 }
@@ -135,7 +285,7 @@ router.post('/download', async (req,res,next)=>{
         let fileType = req.body.fileType;
         for (let i = 0; i < req.body.peptideIds.length; i++){
             console.log(req.body.peptideIds[i]);
-            let curTrans = await getTransitionInfo(req.body.peptideIds[i], fileType);
+            let curTrans = await getTransitionInfo(req.body.peptideIds[i], fileType, true);
             if(curTrans.hasData){
                 for (let j = 0; j < curTrans.queryResult.length; j++){
                     trans.push(curTrans.queryResult[j]);
