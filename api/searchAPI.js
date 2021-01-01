@@ -4,6 +4,7 @@ const pool = require('../dbcon.js').pool;
 const path = require('path');
 const fileHeaders = require('../importFileHeaders.js').fileHeaders;
 const peptideMassFunctions = require('../peptideMassFunctions.js').massFunctions;
+const ppmLimit = 1;  //to minimize false light transitions generation
 
 function reformatOutput(result){
     //result is not empty
@@ -105,13 +106,14 @@ function compareTrans(targetedTran, originalTran, ppm){
 }
 
 function generateTrans(originalTran, modificationList){
+    //return an array of trans because sometimes product ions are of very similar masses and cannot be distinguished
     //console.log(originalTran);
     //return a transition object with keys equal columns of transition table
     let newISTD = (originalTran.istd == 'FALSE')?'TRUE':'FALSE';
     let newPrecursor = (originalTran.istd == 'FALSE')?peptideMassFunctions.getPrecursorHeavyMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],originalTran.Precursor_Ion):
                                             peptideMassFunctions.getPrecursorLightMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],originalTran.Precursor_Ion);
-    let newProduct = (originalTran.istd == 'FALSE')?peptideMassFunctions.getTransHeavyMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],3,originalTran.Product_Ion,10):
-                                        peptideMassFunctions.getTransLightMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],3,originalTran.Product_Ion,10); 
+    let newProduct = (originalTran.istd == 'FALSE')?peptideMassFunctions.getTransHeavyMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],3,originalTran.Product_Ion,ppmLimit):
+                                        peptideMassFunctions.getTransLightMz(originalTran.Peptide,modificationList[originalTran.CatalogNumber],3,originalTran.Product_Ion,ppmLimit); 
     let newProductMz = -1;
 
     if(Object.keys(newProduct) != 0){
@@ -169,9 +171,11 @@ function addLightTrans(queryResult){
                     //find the index of existing trans
                     let existIdx = -1;
                     let calculatedLight = generateTrans(thisTrans, catalogNumberModList);
+                    //console.log("calculatedLight:")
+                    //console.log(calculatedLight);
                     //console.log(transObj);
                     for(let i = 0; i < transObj[thisTrans.CatalogNumber].length; i++){
-                        if(compareTrans(transObj[thisTrans.CatalogNumber][i].light,calculatedLight,10)){
+                        if(compareTrans(transObj[thisTrans.CatalogNumber][i].light,calculatedLight,ppmLimit)){
                             existIdx = i;
                             i = transObj[thisTrans.CatalogNumber].length;
                         }
@@ -190,7 +194,7 @@ function addLightTrans(queryResult){
                     //console.log(transObj);
                     let existIdx = -1;
                     for(let i = 0; i < transObj[thisTrans.CatalogNumber].length; i++){
-                        if(compareTrans(transObj[thisTrans.CatalogNumber][i].light,thisTrans,10)){
+                        if(compareTrans(transObj[thisTrans.CatalogNumber][i].light,thisTrans,ppmLimit)){
                             existIdx = i;
                             i = transObj[thisTrans.CatalogNumber].length;
                         }
